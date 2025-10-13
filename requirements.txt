@@ -4,10 +4,11 @@ requests==2.31.0
 sentence-transformers==2.2.2
 PyPDF2==3.0.1
 python-dotenv==1.0.0
-chromadb==0.4.15
+chromadb
 numpy==1.26.4
 faiss-cpu==1.8.0
 setuptools
 wheel
 sentence-transformers
 huggingface-hub
+requests
