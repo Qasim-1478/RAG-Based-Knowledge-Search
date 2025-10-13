@@ -1,0 +1,591 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Qasim's RAG Search</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css" rel="stylesheet">
+    <style>
+        .upload-area {
+            border: 2px dashed #dee2e6;
+            border-radius: 10px;
+            padding: 2rem;
+            text-align: center;
+            transition: all 0.3s ease;
+            cursor: pointer;
+        }
+        .upload-area:hover {
+            border-color: #0d6efd;
+            background-color: #f8f9fa;
+        }
+        .upload-area.dragover {
+            border-color: #0d6efd;
+            background-color: #e7f1ff;
+        }
+        .document-item {
+            border: 1px solid #dee2e6;
+            border-radius: 8px;
+            padding: 1rem;
+            margin-bottom: 0.5rem;
+            background-color: #f8f9fa;
+        }
+        .source-item {
+            border-left: 4px solid #0d6efd;
+            padding: 1rem;
+            margin-bottom: 1rem;
+            background-color: #f8f9fa;
+        }
+        .loading {
+            display: none;
+        }
+        .loading.show {
+            display: block;
+        }
+        .status-indicator {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            display: inline-block;
+            margin-right: 8px;
+        }
+        .status-online {
+            background-color: #28a745;
+        }
+        .status-offline {
+            background-color: #dc3545;
+        }
+        .answer-container {
+            background-color: #f8f9fa;
+            border-radius: 8px;
+            padding: 1.5rem;
+            margin-top: 1rem;
+        }
+        .query-history {
+            max-height: 300px;
+            overflow-y: auto;
+        }
+    </style>
+</head>
+<body>
+    <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
+        <div class="container">
+            <a class="navbar-brand" href="#">
+                <i class="bi bi-search"></i> RAG based Assistant
+            </a>
+            <div class="navbar-nav ms-auto">
+                <span class="navbar-text">
+                    <span id="status-indicator" class="status-indicator status-offline"></span>
+                    <span id="status-text">Checking...</span>
+                </span>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container mt-4 mb-4">
+        <div class="row">
+            <!-- Left Column: Document Upload -->
+            <div class="col-lg-4">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="mb-0">
+                            <i class="bi bi-upload"></i> Document Upload
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        <div id="upload-area" class="upload-area">
+                            <i class="bi bi-cloud-upload fs-1 text-muted"></i>
+                            <h6 class="mt-2">Drop files here or click to upload</h6>
+                            <p class="text-muted small">Supports: PDF, TXT, MD files</p>
+                            <input type="file" id="file-input" multiple accept=".pdf,.txt,.md" style="display: none;">
+                        </div>
+                        
+                        <div id="upload-progress" class="mt-3" style="display: none;">
+                            <div class="progress">
+                                <div id="progress-bar" class="progress-bar" role="progressbar" style="width: 0%"></div>
+                            </div>
+                            <small id="upload-status" class="text-muted"></small>
+                        </div>
+
+                        <div id="uploaded-files" class="mt-3"></div>
+
+                        <div class="d-grid gap-2 mt-3">
+                            <button id="clear-documents" class="btn btn-outline-danger btn-sm">
+                                <i class="bi bi-trash"></i> Clear All Documents
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Document List -->
+                <div class="card mt-3">
+                    <div class="card-header">
+                        <h6 class="mb-0">
+                            <i class="bi bi-files"></i> Documents (<span id="document-count">0</span>)
+                        </h6>
+                    </div>
+                    <div class="card-body">
+                        <div id="document-list" class="small">
+                            <p class="text-muted">No documents uploaded yet.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Right Column: Query Interface -->
+            <div class="col-lg-8">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="mb-0">
+                            <i class="bi bi-chat-quote"></i> Ask Questions
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        <form id="query-form">
+                            <div class="mb-3">
+                                <textarea id="query-input" class="form-control" rows="3" 
+                                    placeholder="Ask a question about your documents..." required></textarea>
+                            </div>
+                            <div class="d-flex justify-content-between align-items-center">
+                                <button type="submit" class="btn btn-primary">
+                                    <i class="bi bi-search"></i> Search
+                                </button>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" id="include-sources" checked>
+                                    <label class="form-check-label" for="include-sources">
+                                        Include sources
+                                    </label>
+                                </div>
+                            </div>
+                        </form>
+
+                        <!-- Loading Spinner -->
+                        <div id="loading" class="loading text-center mt-4">
+                            <div class="spinner-border text-primary" role="status">
+                                <span class="visually-hidden">Loading...</span>
+                            </div>
+                            <p class="mt-2">Searching and generating answer...</p>
+                        </div>
+
+                        <!-- Answer Display -->
+                        <div id="answer-container" class="answer-container" style="display: none;">
+                            <h6><i class="bi bi-lightbulb"></i> Answer</h6>
+                            <div id="answer-content"></div>
+                        </div>
+
+                        <!-- Sources Display -->
+                        <div id="sources-container" style="display: none;">
+                            <h6 class="mt-4"><i class="bi bi-source-code"></i> Sources</h6>
+                            <div id="sources-content"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Query History -->
+                <div class="card mt-3">
+                    <div class="card-header">
+                        <h6 class="mb-0">
+                            <i class="bi bi-clock-history"></i> Recent Queries
+                        </h6>
+                    </div>
+                    <div class="card-body">
+                        <div id="query-history" class="query-history">
+                            <p class="text-muted small">No queries yet.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast Container -->
+    <div class="toast-container position-fixed bottom-0 end-0 p-3">
+        <div id="toast" class="toast" role="alert">
+            <div class="toast-header">
+                <i class="bi bi-info-circle text-primary me-2"></i>
+                <strong class="me-auto">Notification</strong>
+                <button type="button" class="btn-close" data-bs-dismiss="toast"></button>
+            </div>
+            <div class="toast-body" id="toast-body">
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        class RAGApp {
+            constructor() {
+                this.initializeEventListeners();
+                this.checkHealth();
+                this.loadDocuments();
+                this.loadQueryHistory();
+            }
+
+            initializeEventListeners() {
+                // File upload
+                const uploadArea = document.getElementById('upload-area');
+                const fileInput = document.getElementById('file-input');
+
+                uploadArea.addEventListener('click', () => fileInput.click());
+                uploadArea.addEventListener('dragover', this.handleDragOver.bind(this));
+                uploadArea.addEventListener('dragleave', this.handleDragLeave.bind(this));
+                uploadArea.addEventListener('drop', this.handleDrop.bind(this));
+                fileInput.addEventListener('change', this.handleFileSelect.bind(this));
+
+                // Query form
+                document.getElementById('query-form').addEventListener('submit', this.handleQuery.bind(this));
+
+                // Clear documents
+                document.getElementById('clear-documents').addEventListener('click', this.clearDocuments.bind(this));
+            }
+
+            async checkHealth() {
+                try {
+                    const response = await fetch('/api/health');
+                    const data = await response.json();
+                    
+                    const indicator = document.getElementById('status-indicator');
+                    const text = document.getElementById('status-text');
+                    
+                    if (data.status === 'healthy' && data.model_status) {
+                        indicator.className = 'status-indicator status-online';
+                        text.textContent = 'Model Ready';
+                    } else {
+                        indicator.className = 'status-indicator status-offline';
+                        text.textContent = 'Model Offline';
+                    }
+                } catch (error) {
+                    const indicator = document.getElementById('status-indicator');
+                    const text = document.getElementById('status-text');
+                    indicator.className = 'status-indicator status-offline';
+                    text.textContent = 'Service Offline';
+                }
+            }
+
+            handleDragOver(e) {
+                e.preventDefault();
+                e.currentTarget.classList.add('dragover');
+            }
+
+            handleDragLeave(e) {
+                e.preventDefault();
+                e.currentTarget.classList.remove('dragover');
+            }
+
+            handleDrop(e) {
+                e.preventDefault();
+                e.currentTarget.classList.remove('dragover');
+                const files = e.dataTransfer.files;
+                this.uploadFiles(files);
+            }
+
+            handleFileSelect(e) {
+                const files = e.target.files;
+                this.uploadFiles(files);
+            }
+
+            async uploadFiles(files) {
+                if (files.length === 0) return;
+
+                const formData = new FormData();
+                Array.from(files).forEach(file => {
+                    formData.append('files', file);
+                });
+
+                this.showUploadProgress(true);
+                this.updateUploadStatus('Uploading files...');
+
+                try {
+                    const response = await fetch('/api/upload', {
+                        method: 'POST',
+                        body: formData
+                    });
+
+                    const result = await response.json();
+
+                    if (response.ok) {
+                        this.showToast('success', `Successfully processed ${result.processed_count} documents`);
+                        this.loadDocuments();
+                        this.displayUploadedFiles(result.uploaded_files);
+                    } else {
+                        this.showToast('error', result.error || 'Upload failed');
+                    }
+                } catch (error) {
+                    this.showToast('error', 'Upload failed: ' + error.message);
+                } finally {
+                    this.showUploadProgress(false);
+                }
+            }
+
+            showUploadProgress(show) {
+                const progress = document.getElementById('upload-progress');
+                progress.style.display = show ? 'block' : 'none';
+            }
+
+            updateUploadStatus(status) {
+                document.getElementById('upload-status').textContent = status;
+            }
+
+            displayUploadedFiles(files) {
+                const container = document.getElementById('uploaded-files');
+                container.innerHTML = '';
+
+                files.forEach(file => {
+                    const div = document.createElement('div');
+                    div.className = 'document-item';
+                    div.innerHTML = `
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div>
+                                <strong>${file.original_name}</strong>
+                                <br>
+                                <small class="text-muted">${this.formatFileSize(file.size)}</small>
+                            </div>
+                            <i class="bi bi-check-circle text-success"></i>
+                        </div>
+                    `;
+                    container.appendChild(div);
+                });
+            }
+
+            async loadDocuments() {
+                try {
+                    const response = await fetch('/api/documents');
+                    const data = await response.json();
+
+                    if (response.ok) {
+                        this.updateDocumentList(data.documents);
+                        document.getElementById('document-count').textContent = data.total_count;
+                    }
+                } catch (error) {
+                    console.error('Error loading documents:', error);
+                }
+            }
+
+            updateDocumentList(documents) {
+                const container = document.getElementById('document-list');
+                
+                if (documents.length === 0) {
+                    container.innerHTML = '<p class="text-muted">No documents uploaded yet.</p>';
+                    return;
+                }
+
+                // Group documents by filename
+                const grouped = {};
+                documents.forEach(doc => {
+                    if (!grouped[doc.filename]) {
+                        grouped[doc.filename] = [];
+                    }
+                    grouped[doc.filename].push(doc);
+                });
+
+                container.innerHTML = '';
+                Object.entries(grouped).forEach(([filename, chunks]) => {
+                    const div = document.createElement('div');
+                    div.className = 'document-item';
+                    div.innerHTML = `
+                        <div class="d-flex justify-content-between align-items-start">
+                            <div>
+                                <strong>${filename}</strong>
+                                <br>
+                                <small class="text-muted">${chunks.length} chunks</small>
+                            </div>
+                            <small class="text-muted">${chunks[0].metadata.added_at.split('T')[0]}</small>
+                        </div>
+                    `;
+                    container.appendChild(div);
+                });
+            }
+
+            async handleQuery(e) {
+                e.preventDefault();
+                
+                const query = document.getElementById('query-input').value.trim();
+                if (!query) return;
+
+                const includeSources = document.getElementById('include-sources').checked;
+                
+                this.showLoading(true);
+                this.hideResults();
+
+                try {
+                    const response = await fetch('/api/query', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                            query: query,
+                            include_sources: includeSources
+                        })
+                    });
+
+                    const result = await response.json();
+
+                    if (response.ok) {
+                        this.displayResults(result);
+                        this.addToQueryHistory(query, result.answer);
+                    } else {
+                        this.showToast('error', result.error || 'Query failed');
+                    }
+                } catch (error) {
+                    this.showToast('error', 'Query failed: ' + error.message);
+                } finally {
+                    this.showLoading(false);
+                }
+            }
+
+            displayResults(result) {
+                // Display answer
+                const answerContainer = document.getElementById('answer-container');
+                const answerContent = document.getElementById('answer-content');
+                
+                answerContent.innerHTML = result.answer;
+                answerContainer.style.display = 'block';
+
+                // Display sources if available
+                if (result.sources && result.sources.length > 0) {
+                    const sourcesContainer = document.getElementById('sources-container');
+                    const sourcesContent = document.getElementById('sources-content');
+                    
+                    sourcesContent.innerHTML = '';
+                    result.sources.forEach((source, index) => {
+                        const div = document.createElement('div');
+                        div.className = 'source-item';
+                        div.innerHTML = `
+                            <div class="d-flex justify-content-between align-items-start">
+                                <div>
+                                    <strong>${source.filename}</strong>
+                                    <p class="mb-1 mt-1">${source.content}</p>
+                                    <small class="text-muted">Relevance: ${(source.relevance_score * 100).toFixed(1)}%</small>
+                                </div>
+                            </div>
+                        `;
+                        sourcesContent.appendChild(div);
+                    });
+                    
+                    sourcesContainer.style.display = 'block';
+                } else {
+                    document.getElementById('sources-container').style.display = 'none';
+                }
+            }
+
+            hideResults() {
+                document.getElementById('answer-container').style.display = 'none';
+                document.getElementById('sources-container').style.display = 'none';
+            }
+
+            showLoading(show) {
+                const loading = document.getElementById('loading');
+                if (show) {
+                    loading.classList.add('show');
+                } else {
+                    loading.classList.remove('show');
+                }
+            }
+
+            addToQueryHistory(query, answer) {
+                const history = this.getQueryHistory();
+                const newEntry = {
+                    query: query,
+                    answer: answer.substring(0, 100) + (answer.length > 100 ? '...' : ''),
+                    timestamp: new Date().toLocaleString()
+                };
+                
+                history.unshift(newEntry);
+                if (history.length > 10) {
+                    history.pop();
+                }
+                
+                localStorage.setItem('rag_query_history', JSON.stringify(history));
+                this.displayQueryHistory(history);
+            }
+
+            getQueryHistory() {
+                const stored = localStorage.getItem('rag_query_history');
+                return stored ? JSON.parse(stored) : [];
+            }
+
+            loadQueryHistory() {
+                const history = this.getQueryHistory();
+                this.displayQueryHistory(history);
+            }
+
+            displayQueryHistory(history) {
+                const container = document.getElementById('query-history');
+                
+                if (history.length === 0) {
+                    container.innerHTML = '<p class="text-muted small">No queries yet.</p>';
+                    return;
+                }
+
+                container.innerHTML = '';
+                history.forEach(entry => {
+                    const div = document.createElement('div');
+                    div.className = 'border-bottom pb-2 mb-2';
+                    div.innerHTML = `
+                        <div class="d-flex justify-content-between align-items-start">
+                            <div>
+                                <strong class="small">${entry.query}</strong>
+                                <p class="mb-1 small text-muted">${entry.answer}</p>
+                            </div>
+                            <small class="text-muted">${entry.timestamp}</small>
+                        </div>
+                    `;
+                    container.appendChild(div);
+                });
+            }
+
+            async clearDocuments() {
+                if (!confirm('Are you sure you want to clear all documents?')) {
+                    return;
+                }
+
+                try {
+                    const response = await fetch('/api/clear', {
+                        method: 'POST'
+                    });
+
+                    const result = await response.json();
+
+                    if (response.ok) {
+                        this.showToast('success', `Cleared ${result.cleared_count} documents`);
+                        this.loadDocuments();
+                        document.getElementById('uploaded-files').innerHTML = '';
+                    } else {
+                        this.showToast('error', result.error || 'Failed to clear documents');
+                    }
+                } catch (error) {
+                    this.showToast('error', 'Failed to clear documents: ' + error.message);
+                }
+            }
+
+            showToast(type, message) {
+                const toast = document.getElementById('toast');
+                const toastBody = document.getElementById('toast-body');
+                
+                const icon = type === 'success' ? 'check-circle' : 'exclamation-circle';
+                const color = type === 'success' ? 'success' : 'danger';
+                
+                toast.querySelector('.toast-header i').className = `bi bi-${icon} text-${color} me-2`;
+                toastBody.textContent = message;
+                
+                const bsToast = new bootstrap.Toast(toast);
+                bsToast.show();
+            }
+
+            formatFileSize(bytes) {
+                if (bytes === 0) return '0 Bytes';
+                const k = 1024;
+                const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+                const i = Math.floor(Math.log(bytes) / Math.log(k));
+                return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+            }
+        }
+
+        // Initialize the app when the page loads
+        document.addEventListener('DOMContentLoaded', () => {
+            new RAGApp();
+        });
+    </script>
+</body>
+</html>
