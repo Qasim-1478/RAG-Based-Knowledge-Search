@@ -30,11 +30,6 @@ Visit [https://ollama.ai/download](https://ollama.ai/download) and follow the in
 
 ### 1. Clone and Navigate to Project
 
-```bash
-git clone <your-repo-url>
-cd RAG
-```
-
 ### 2. Create Virtual Environment
 
 ```bash
