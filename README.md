@@ -12,7 +12,6 @@ A Flask-based Retrieval-Augmented Generation (RAG) system that enables intellige
 - **Vector Database**: Efficient document storage using FAISS
 - **Real-time Status**: Model availability and health monitoring
 - **Query History**: Local storage of recent queries and answers
-- **Drag & Drop Upload**: Easy document ingestion with progress tracking
 
 ## 📋 Prerequisites
 
